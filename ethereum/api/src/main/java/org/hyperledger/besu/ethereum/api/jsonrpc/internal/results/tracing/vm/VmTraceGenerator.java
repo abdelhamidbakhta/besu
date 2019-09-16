@@ -12,6 +12,8 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.tracing.vm;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.tracing.Trace;
 import org.hyperledger.besu.ethereum.core.Gas;
@@ -29,6 +31,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class VmTraceGenerator {
+  public static final Logger LOG = LogManager.getLogger();
 
   /**
    * Generate a stream of trace result objects.
@@ -57,9 +60,14 @@ public class VmTraceGenerator {
           .map(BytesValue::getHexString)
           .ifPresent(rootVmTrace::setCode);
       final AtomicInteger index = new AtomicInteger(0);
+      final long firstFrameGasRemaining =
+          transactionTrace.getTraceFrames().get(0).getGasRemaining().toLong();
       transactionTrace
           .getTraceFrames()
-          .forEach(traceFrame -> addFrame(index, transactionTrace, traceFrame, parentTraces));
+          .forEach(
+              traceFrame ->
+                  addFrame(
+                      firstFrameGasRemaining, index, transactionTrace, traceFrame, parentTraces));
     }
 
     rootVmTrace.getOps().forEach(VmTraceGenerator::reduceGasUsed);
@@ -83,10 +91,17 @@ public class VmTraceGenerator {
    * @param traceFrame the current trace frame
    */
   private static void addFrame(
+      final long firstFrameGasRemaining,
       final AtomicInteger index,
       final TransactionTrace transactionTrace,
       final TraceFrame traceFrame,
       final Deque<VmTrace> parentTraces) {
+    LOG.info(
+        "{} - {} - {}",
+        traceFrame.getPc(),
+        traceFrame.getOpcode(),
+        traceFrame.getGasRemaining().toLong());
+    LOG.info("used: {}", firstFrameGasRemaining - traceFrame.getGasRemaining().toLong());
     if ("STOP".equals(traceFrame.getOpcode())) {
       return;
     }
@@ -126,7 +141,7 @@ public class VmTraceGenerator {
           .ifPresent(
               memory -> {
                 if (memory.length > 0) {
-                  ex.setMem(new Mem(BytesValues.trimTrailingZeros(memory[0]).getHexString(), 0));
+                  ex.setMem(new Mem(Trace.dumpAndTrimTrailingZeros(memory), 0));
                 }
               });
     }

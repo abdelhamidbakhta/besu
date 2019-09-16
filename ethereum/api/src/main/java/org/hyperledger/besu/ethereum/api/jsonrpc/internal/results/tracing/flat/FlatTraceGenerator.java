@@ -35,8 +35,11 @@ import java.util.stream.Stream;
 
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Atomics;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class FlatTraceGenerator {
+  public static final Logger LOG = LogManager.getLogger();
 
   /**
    * Generates a stream of {@link Trace} from the passed {@link TransactionTrace} data.
@@ -103,7 +106,10 @@ public class FlatTraceGenerator {
     final AtomicLong cumulativeGasCost = new AtomicLong(0);
     final Gas transactionIntrinsicGasCost =
         gasCalculator.transactionIntrinsicGasCost(transactionTrace.getTransaction());
-
+    LOG.debug(
+        "Transaction intrinsic gas cost: {} - {}",
+        transactionIntrinsicGasCost.toLong(),
+        transactionIntrinsicGasCost.toHexString());
     int traceFrameIndex = 0;
     for (TraceFrame traceFrame : transactionTrace.getTraceFrames()) {
       cumulativeGasCost.addAndGet(traceFrame.getGasCost().orElse(Gas.ZERO).toLong());

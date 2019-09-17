@@ -28,11 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 public class VmTraceGenerator {
-  public static final Logger LOG = LogManager.getLogger();
 
   /**
    * Generate a stream of trace result objects.
@@ -61,27 +57,11 @@ public class VmTraceGenerator {
           .map(BytesValue::getHexString)
           .ifPresent(rootVmTrace::setCode);
       final AtomicInteger index = new AtomicInteger(0);
-      final long firstFrameGasRemaining =
-          transactionTrace.getTraceFrames().get(0).getGasRemaining().toLong();
       transactionTrace
           .getTraceFrames()
-          .forEach(
-              traceFrame ->
-                  addFrame(
-                      firstFrameGasRemaining, index, transactionTrace, traceFrame, parentTraces));
+          .forEach(traceFrame -> addFrame(index, transactionTrace, traceFrame, parentTraces));
     }
-
-    rootVmTrace.getOps().forEach(VmTraceGenerator::reduceGasUsed);
     return rootVmTrace;
-  }
-
-  private static void reduceGasUsed(final Op op) {
-    final VmTrace sub = op.getSub();
-    if (sub == null) {
-      return;
-    }
-    op.getEx().setUsed(op.getEx().getUsed() - Op.totalGasCost(sub.getOps().stream()));
-    sub.getOps().forEach(VmTraceGenerator::reduceGasUsed);
   }
 
   /**
@@ -90,19 +70,13 @@ public class VmTraceGenerator {
    * @param index index of the current frame in the trace
    * @param transactionTrace the transaction trace
    * @param traceFrame the current trace frame
+   * @param parentTraces the queue of parent traces
    */
   private static void addFrame(
-      final long firstFrameGasRemaining,
       final AtomicInteger index,
       final TransactionTrace transactionTrace,
       final TraceFrame traceFrame,
       final Deque<VmTrace> parentTraces) {
-    LOG.info(
-        "{} - {} - {}",
-        traceFrame.getPc(),
-        traceFrame.getOpcode(),
-        traceFrame.getGasRemaining().toLong());
-    LOG.info("used: {}", firstFrameGasRemaining - traceFrame.getGasRemaining().toLong());
     if ("STOP".equals(traceFrame.getOpcode())) {
       return;
     }
@@ -131,7 +105,7 @@ public class VmTraceGenerator {
     final boolean isPreviousFrameReturnOpCode =
         index.get() != 0
             ? Optional.ofNullable(transactionTrace.getTraceFrames().get(index.get() - 1))
-                .map(traceFrame1 -> "RETURN".equals(traceFrame1.getOpcode()))
+                .map(frame -> "RETURN".equals(frame.getOpcode()))
                 .orElse(false)
             : false;
 
@@ -139,12 +113,10 @@ public class VmTraceGenerator {
     if (traceFrame.isMemoryWritten() && !isPreviousFrameReturnOpCode) {
       maybeNextFrame
           .flatMap(TraceFrame::getMemory)
-          .ifPresent(
-              memory -> {
-                if (memory.length > 0) {
-                  ex.setMem(new Mem(Trace.dumpAndTrimTrailingZeros(memory), 0));
-                }
-              });
+          .filter(memory -> memory.length > 0)
+          .map(Trace::dumpAndTrimTrailingZeros)
+          .map(Mem::new)
+          .ifPresent(ex::setMem);
     }
 
     // set push from stack elements if some elements have been produced
@@ -167,6 +139,8 @@ public class VmTraceGenerator {
       newSubTrace = new VmTrace();
       parentTraces.addLast(newSubTrace);
       ex.addPush("0x1");
+      findFrameAfterReturn(transactionTrace, traceFrame, index.get())
+          .ifPresent(frame -> ex.setUsed(frame.getGasRemaining().toLong()));
       op.setSub(newSubTrace);
     }
 
@@ -184,6 +158,29 @@ public class VmTraceGenerator {
     currentTrace.add(op);
 
     index.incrementAndGet();
+  }
+
+  /**
+   * Find the frame after return to set the gas used of CALL frame.
+   *
+   * @param trace the root {@link TransactionTrace}
+   * @param callFrame the CALL frame
+   * @param callIndex the CALL frame index
+   * @return an {@link Optional} of {@link TraceFrame} containing the frame after return if found.
+   */
+  private static Optional<TraceFrame> findFrameAfterReturn(
+      final TransactionTrace trace, final TraceFrame callFrame, final int callIndex) {
+    final int numberOfFrames = trace.getTraceFrames().size();
+    for (int i = callIndex; i < numberOfFrames; i++) {
+      final TraceFrame frame = trace.getTraceFrames().get(i);
+      if ("RETURN".equals(frame.getOpcode()) && (i + 1) < numberOfFrames) {
+        final TraceFrame next = trace.getTraceFrames().get(i + 1);
+        if (next.getPc() == (callFrame.getPc() + 1) && next.getDepth() == callFrame.getDepth()) {
+          return Optional.of(next);
+        }
+      }
+    }
+    return Optional.empty();
   }
 
   /**

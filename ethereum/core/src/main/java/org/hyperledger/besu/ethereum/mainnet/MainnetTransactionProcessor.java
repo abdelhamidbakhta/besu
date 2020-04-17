@@ -202,12 +202,12 @@ public class MainnetTransactionProcessor implements TransactionProcessor {
 
         final MutableAccount senderMutableAccount = sender.getMutable();
         final long previousNonce = senderMutableAccount.incrementNonce();
-        LOG.info(
+        LOG.trace(
                 "Incremented sender {} nonce ({} -> {})", senderAddress, previousNonce, sender.getNonce());
 
         final Wei upfrontGasCost = transaction.getUpfrontGasCost(gasPrice);
         final Wei previousBalance = senderMutableAccount.decrementBalance(upfrontGasCost);
-        LOG.info(
+        LOG.trace(
                 "Deducted sender {} upfront gas cost {} ({} -> {})",
                 senderAddress,
                 upfrontGasCost,
@@ -216,7 +216,7 @@ public class MainnetTransactionProcessor implements TransactionProcessor {
 
         final Gas intrinsicGas = gasCalculator.transactionIntrinsicGasCost(transaction);
         final Gas gasAvailable = Gas.of(transaction.getGasLimit()).minus(intrinsicGas);
-        LOG.info(
+        LOG.trace(
                 "Gas available for execution {} = {} - {} (limit - intrinsic)",
                 gasAvailable,
                 transaction.getGasLimit(),
@@ -301,12 +301,12 @@ public class MainnetTransactionProcessor implements TransactionProcessor {
             worldUpdater.commit();
         }
 
-
-        LOG.info(
-                "Gas used by transaction: {}, by message call/contract creation: {}",
-                () -> Gas.of(transaction.getGasLimit()).minus(initialFrame.getRemainingGas()),
-                () -> gasAvailable.minus(initialFrame.getRemainingGas()));
-
+        if (LOG.isTraceEnabled()) {
+            LOG.trace(
+                    "Gas used by transaction: {}, by message call/contract creation: {}",
+                    () -> Gas.of(transaction.getGasLimit()).minus(initialFrame.getRemainingGas()),
+                    () -> gasAvailable.minus(initialFrame.getRemainingGas()));
+        }
 
         // Refund the sender by what we should and pay the miner fee (note that we're doing them one
         // after the other so that if it is the same account somehow, we end up with the right result)

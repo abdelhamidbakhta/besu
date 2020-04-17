@@ -261,6 +261,14 @@ public class Transaction implements org.hyperledger.besu.plugin.data.Transaction
     return gasPrice;
   }
 
+  public Wei computeGasPriceEIP1559(final long baseFee) {
+    long price = gasPremium.toLong() + baseFee;
+    if (price > feeCap.toLong()) {
+      price = feeCap.toLong();
+    }
+    return Wei.of(price);
+  }
+
   /**
    * Return the transaction gas premium.
    *
@@ -410,13 +418,22 @@ public class Transaction implements org.hyperledger.besu.plugin.data.Transaction
   public void writeTo(final RLPOutput out) {
     out.startList();
 
+    final boolean asEIP1559 =
+        ExperimentalEIPs.eip1559Enabled
+            && (gasPrice == null || gasPrice.isZero())
+            && gasPremium != null
+            && feeCap != null;
     out.writeLongScalar(getNonce());
-    out.writeUInt256Scalar(getGasPrice());
+    if (asEIP1559) {
+      out.writeNull();
+    } else {
+      out.writeUInt256Scalar(getGasPrice());
+    }
     out.writeLongScalar(getGasLimit());
     out.writeBytes(getTo().isPresent() ? getTo().get() : Bytes.EMPTY);
     out.writeUInt256Scalar(getValue());
     out.writeBytes(getPayload());
-    if (ExperimentalEIPs.eip1559Enabled && gasPremium != null && feeCap != null) {
+    if (asEIP1559) {
       out.writeUInt256Scalar(gasPremium);
       out.writeUInt256Scalar(feeCap);
     }
@@ -483,6 +500,10 @@ public class Transaction implements org.hyperledger.besu.plugin.data.Transaction
    */
   public Wei getUpfrontGasCost() {
     return Wei.of(getGasLimit()).multiply(getGasPrice());
+  }
+
+  public Wei getUpfrontGasCost(final Wei price) {
+    return Wei.of(getGasLimit()).multiply(price);
   }
 
   /**

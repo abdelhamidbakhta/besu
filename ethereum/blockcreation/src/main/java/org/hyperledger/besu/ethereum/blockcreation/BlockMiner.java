@@ -132,6 +132,16 @@ public class BlockMiner<C, M extends AbstractBlockCreator<C>> implements Runnabl
     if (blockImported) {
       notifyNewBlockListeners(block);
       final double taskTimeInSec = stopwatch.elapsed(TimeUnit.MILLISECONDS) / 1000.0;
+      System.out.println(
+          String.format(
+              "mined block #%,d / %d tx / %d om / %,d (%01.1f%%) gas / (%s) in %01.3fs",
+              block.getHeader().getNumber(),
+              block.getBody().getTransactions().size(),
+              block.getBody().getOmmers().size(),
+              block.getHeader().getGasUsed(),
+              (block.getHeader().getGasUsed() * 100.0) / block.getHeader().getGasLimit(),
+              block.getHash().toHexString().substring(0,4).concat("****"),
+              taskTimeInSec));
       LOG.info(
           String.format(
               "Produced and imported block #%,d / %d tx / %d om / %,d (%01.1f%%) gas / (%s) in %01.3fs",

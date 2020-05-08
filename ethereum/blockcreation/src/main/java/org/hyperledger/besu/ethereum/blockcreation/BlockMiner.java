@@ -22,6 +22,7 @@ import org.hyperledger.besu.ethereum.core.BlockImporter;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.mainnet.HeaderValidationMode;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
+import org.hyperledger.besu.plugin.data.Quantity;
 import org.hyperledger.besu.util.Subscribers;
 
 import java.util.List;
@@ -56,6 +57,7 @@ public class BlockMiner<C, M extends AbstractBlockCreator<C>> implements Runnabl
   private final ProtocolSchedule<C> protocolSchedule;
   private final Subscribers<MinedBlockObserver> observers;
   private final AbstractBlockScheduler scheduler;
+  // private static Long lastBaseFee = null;
 
   public BlockMiner(
       final Function<BlockHeader, M> blockCreatorFactory,
@@ -134,14 +136,78 @@ public class BlockMiner<C, M extends AbstractBlockCreator<C>> implements Runnabl
       final double taskTimeInSec = stopwatch.elapsed(TimeUnit.MILLISECONDS) / 1000.0;
       System.out.println(
           String.format(
-              "mined block #%,d / %d tx / %d om / %,d (%01.1f%%) gas / (%s) in %01.3fs",
+              "%sbesu%s => mined block %s#%,d%s / %d tx / %,d (%01.1f%%) gas / (%s)",
+              ConsoleColors.GREEN,
+              ConsoleColors.RESET,
+              ConsoleColors.BLUE_UNDERLINED,
               block.getHeader().getNumber(),
+              ConsoleColors.RESET,
               block.getBody().getTransactions().size(),
-              block.getBody().getOmmers().size(),
               block.getHeader().getGasUsed(),
               (block.getHeader().getGasUsed() * 100.0) / block.getHeader().getGasLimit(),
-              block.getHash().toHexString().substring(0,4).concat("****"),
-              taskTimeInSec));
+              block.getHash().toHexString().substring(0, 4).concat("****")));
+      if (block.getHeader().getNumber() > 9) {
+        /*String suffix = "";
+        if (lastBaseFee != null) {
+          if (lastBaseFee < block.getHeader().getBaseFee().orElseThrow()) {
+            suffix = "(increased because network demand is above target gas usage)";
+          } else if (lastBaseFee > block.getHeader().getBaseFee().orElseThrow()) {
+            suffix = "(decreased because network demand is below target gas usage)";
+          }
+        }
+        System.out.println(
+            String.format(
+                "%sBASEFEE%s:%s %s",
+                ConsoleColors.BLUE_UNDERLINED,
+                ConsoleColors.RESET,
+                block.getHeader().getBaseFee().map(bf -> Long.toString(bf)).orElseThrow(),
+                suffix));
+        lastBaseFee = block.getHeader().getBaseFee().orElseThrow();*/
+      }
+      block
+          .getBody()
+          .getTransactions()
+          .forEach(
+              tx -> {
+                if (tx.isEIP1559Transaction()) {
+                  System.out.printf(
+                      "%s%s[EIP-1559]%s TX => value: %d %sgasPremium%s: %s %sfeeCap%s:%s%s\n",
+                      ConsoleColors.WHITE_BACKGROUND_BRIGHT,
+                      ConsoleColors.RED_BOLD_BRIGHT,
+                      ConsoleColors.RESET,
+                      tx.getValue().toLong(),
+                      ConsoleColors.BLUE_UNDERLINED,
+                      ConsoleColors.RESET,
+                      tx.getGasPremium()
+                          .map(Quantity::getValue)
+                          .map(Number::longValue)
+                          .map(String::valueOf)
+                          .orElseThrow(),
+                      ConsoleColors.BLUE_UNDERLINED,
+                      ConsoleColors.RESET,
+                      tx.getFeeCap()
+                          .map(Quantity::getValue)
+                          .map(Number::longValue)
+                          .map(String::valueOf)
+                          .orElseThrow(),
+                      ConsoleColors.RESET);
+                } else {
+                  System.out.printf(
+                      "%s[LEGACY]%s TX => value: %s gasPrice: %s\n",
+                      ConsoleColors.BLUE_BOLD_BRIGHT,
+                      ConsoleColors.RESET,
+                      tx.getValue().toShortHexString(),
+                      tx.getGasPrice().toShortHexString());
+                }
+              });
+      if (block.getHeader().getNumber() == 9) {
+        System.out.println(
+            String.format(
+                "%s%sEIP-1559 fork activation%s",
+                ConsoleColors.WHITE_BACKGROUND_BRIGHT,
+                ConsoleColors.RED_BOLD_BRIGHT,
+                ConsoleColors.RESET));
+      }
       LOG.info(
           String.format(
               "Produced and imported block #%,d / %d tx / %d om / %,d (%01.1f%%) gas / (%s) in %01.3fs",

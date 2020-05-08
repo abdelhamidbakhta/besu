@@ -1047,7 +1047,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   @Override
   public void run() {
     try {
-      configureLogging(true);
+      configureLogging(false);
       configureNativeLibs();
       logger.info("Starting Besu version: {}", BesuInfo.nodeName(identityString));
       // Need to create vertx after cmdline has been parsed, such that metricSystem is configurable

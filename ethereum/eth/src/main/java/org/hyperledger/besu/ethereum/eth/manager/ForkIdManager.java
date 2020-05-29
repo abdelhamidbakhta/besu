@@ -100,11 +100,18 @@ public class ForkIdManager {
   }
 
   ForkId getLatestForkId() {
+    if (legacyForkAndHashList.size() > 0) {
+      return legacyForkAndHashList.get(legacyForkAndHashList.size() - 1);
+    }
+    return null;
+  }
+
+  /*ForkId getLatestForkId() {
     if (forkAndHashList.size() > 0) {
       return forkAndHashList.get(forkAndHashList.size() - 1);
     }
     return null;
-  }
+  }*/
 
   public static ForkId readFrom(final RLPInput in) {
     in.enterList();

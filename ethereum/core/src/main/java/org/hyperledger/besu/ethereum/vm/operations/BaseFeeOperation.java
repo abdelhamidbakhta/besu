@@ -41,7 +41,7 @@ public class BaseFeeOperation extends AbstractFixedCostOperation {
             .getBlockHeader()
             .getBaseFee()
             .map(Bytes::ofUnsignedLong)
-            .map(Bytes32::wrap)
+            .map(Bytes32::leftPad)
             .orElseThrow());
     return successResponse;
   }
